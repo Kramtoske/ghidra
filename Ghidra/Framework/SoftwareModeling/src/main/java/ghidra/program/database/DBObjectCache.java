@@ -22,7 +22,7 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.*;
 
-import db.Record;
+import db.DBRecord;
 import ghidra.program.model.address.KeyRange;
 
 /**
@@ -35,7 +35,7 @@ import ghidra.program.model.address.KeyRange;
  */
 public class DBObjectCache<T extends DatabaseObject> {
 
-	private Map<Long, KeyedSoftReference> map;
+	private Map<Long, KeyedSoftReference<T>> map;
 	private ReferenceQueue<T> refQueue;
 	private LinkedList<T> hardCache;
 	private int hardCacheSize;
@@ -49,9 +49,9 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 */
 	public DBObjectCache(int hardCacheSize) {
 		this.hardCacheSize = hardCacheSize;
-		map = new HashMap<Long, KeyedSoftReference>();
-		refQueue = new ReferenceQueue<T>();
-		hardCache = new LinkedList<T>();
+		map = new HashMap<>();
+		refQueue = new ReferenceQueue<>();
+		hardCache = new LinkedList<>();
 	}
 
 	/**
@@ -60,7 +60,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 * @return the cached object or null if the object with that key is not currently cached.
 	 */
 	public synchronized T get(long key) {
-		KeyedSoftReference ref = map.get(key);
+		KeyedSoftReference<T> ref = map.get(key);
 		if (ref != null) {
 			T obj = ref.get();
 			if (obj == null) {
@@ -81,15 +81,15 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 * Retrieves the database object with the given record and associated key from the cache.
 	 * This form should be used in conjunction with record iterators to avoid unnecessary
 	 * record query during a possible object refresh.  To benefit from the record the cached
-	 * object must implement the {@link DatabaseObject#refresh(Record)} method which by default
+	 * object must implement the {@link DatabaseObject#refresh(DBRecord)} method which by default
 	 * ignores the record and simply calls {@link DatabaseObject#refresh()}.
 	 * @param objectRecord the valid record corresponding to the object to be retrieved and possibly
 	 * used to refresh the associated object if found in cache
 	 * @return the cached object or null if the object with that key is not currently cached.
 	 */
-	public synchronized T get(Record objectRecord) {
+	public synchronized T get(DBRecord objectRecord) {
 		long key = objectRecord.getKey();
-		KeyedSoftReference ref = map.get(key);
+		KeyedSoftReference<T> ref = map.get(key);
 		if (ref != null) {
 			T obj = ref.get();
 			if (obj == null) {
@@ -133,7 +133,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 		processQueue();
 		long key = data.getKey();
 		addToHardCache(data);
-		KeyedSoftReference ref = new KeyedSoftReference(key, data, refQueue);
+		KeyedSoftReference<T> ref = new KeyedSoftReference<>(key, data, refQueue);
 		map.put(key, ref);
 	}
 
@@ -142,9 +142,9 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 * @return an List of all the cached objects.
 	 */
 	public synchronized List<T> getCachedObjects() {
-		ArrayList<T> list = new ArrayList<T>();
+		ArrayList<T> list = new ArrayList<>();
 		processQueue();
-		for (KeyedSoftReference ref : map.values()) {
+		for (KeyedSoftReference<T> ref : map.values()) {
 			T obj = ref.get();
 			if (obj != null) {
 				list.add(obj);
@@ -158,6 +158,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 * within the specified keyRanges.
 	 * @param keyRanges key ranges to delete
 	 */
+//TODO: Discourage large cases by only allowing a single range to be specified
 	public synchronized void delete(List<KeyRange> keyRanges) {
 		hardCache.clear();
 		processQueue();
@@ -179,7 +180,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 	private void deleteSmallKeyRanges(List<KeyRange> keyRanges) {
 		for (KeyRange range : keyRanges) {
 			for (long key = range.minKey; key <= range.maxKey; key++) {
-				KeyedSoftReference ref = map.remove(key);
+				KeyedSoftReference<T> ref = map.remove(key);
 				if (ref != null) {
 					DatabaseObject obj = ref.get();
 					if (obj != null) {
@@ -201,7 +202,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 		map.values().removeIf(ref -> checkRef(ref, keyRanges));
 	}
 
-	private boolean checkRef(KeyedSoftReference ref, List<KeyRange> keyRanges) {
+	private boolean checkRef(KeyedSoftReference<T> ref, List<KeyRange> keyRanges) {
 		long key = ref.getKey();
 		if (keyRangesContain(keyRanges, key)) {
 			DatabaseObject obj = ref.get();
@@ -251,7 +252,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 		processQueue();
 		if (++invalidateCount <= 0) {
 			invalidateCount = 1;
-			for (KeyedSoftReference ref : map.values()) {
+			for (KeyedSoftReference<T> ref : map.values()) {
 				DatabaseObject obj = ref.get();
 				if (obj != null) {
 					obj.setInvalid();
@@ -275,7 +276,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 	 */
 	public synchronized void delete(long key) {
 		processQueue();
-		KeyedSoftReference ref = map.get(key);
+		KeyedSoftReference<T> ref = map.get(key);
 		if (ref != null) {
 			T obj = ref.get();
 			if (obj != null) {
@@ -296,10 +297,10 @@ public class DBObjectCache<T extends DatabaseObject> {
 	// we know the cast is safe--we put them in there
 	@SuppressWarnings("unchecked")
 	private void processQueue() {
-		KeyedSoftReference ref;
-		while ((ref = (KeyedSoftReference) refQueue.poll()) != null) {
+		KeyedSoftReference<T> ref;
+		while ((ref = (KeyedSoftReference<T>) refQueue.poll()) != null) {
 			long key = ref.getKey();
-			KeyedSoftReference oldValue = map.remove(key);
+			KeyedSoftReference<T> oldValue = map.remove(key);
 
 			if (oldValue != null && oldValue != ref) {
 				// we have put another item in the cache with the same key.  Further, we
@@ -311,7 +312,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 		}
 	}
 
-	private class KeyedSoftReference extends WeakReference<T> {
+	private static class KeyedSoftReference<T> extends WeakReference<T> {
 		private long key;
 
 		KeyedSoftReference(long key, T obj, ReferenceQueue<T> queue) {
@@ -327,7 +328,7 @@ public class DBObjectCache<T extends DatabaseObject> {
 	public synchronized void keyChanged(long oldKey, long newKey) {
 		processQueue();
 
-		KeyedSoftReference ref = map.remove(oldKey);
+		KeyedSoftReference<T> ref = map.remove(oldKey);
 		if (ref != null) {
 			map.put(newKey, ref);
 			T t = ref.get();

@@ -31,7 +31,7 @@ import java.util.TreeMap;
  * the final field entries.
  */
 public class NoisyStructureBuilder {
-	private TreeMap<Long, DataType> offsetToDataTypeMap = new TreeMap<Long, DataType>();
+	private TreeMap<Long, DataType> offsetToDataTypeMap = new TreeMap<>();
 	private Structure structDT = null;
 	private long sizeOfStruct = 0;
 
@@ -79,9 +79,18 @@ public class NoisyStructureBuilder {
 	 * @param dt is the data-type of field if known (null otherwise)
 	 */
 	public void addDataType(long offset, DataType dt) {
-		if (dt == null) {
+		if (dt == null || dt instanceof VoidDataType) {
 			computeMax(offset, 1);
 			return;
+		}
+		if (dt instanceof Pointer) {
+			DataType baseType = ((Pointer) dt).getDataType();
+			if (baseType != null && baseType.equals(structDT)) {
+				// Be careful of taking a pointer to the structure when the structure
+				// is not fully defined
+				DataTypeManager manager = dt.getDataTypeManager();
+				dt = manager.getPointer(DataType.DEFAULT, dt.getLength());
+			}
 		}
 		computeMax(offset, dt.getLength());
 		Entry<Long, DataType> firstEntry = checkForOverlap(offset, dt.getLength());
@@ -121,7 +130,7 @@ public class NoisyStructureBuilder {
 	public void addReference(long offset, DataType dt) {
 		if (dt != null && dt instanceof Pointer) {
 			dt = ((Pointer) dt).getDataType();
-			if (dt.equals(structDT)) {
+			if (dt != null && dt.equals(structDT)) {
 				return;		// Don't allow structure to contain itself
 			}
 			if (dt instanceof Structure) {

@@ -31,6 +31,7 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.VoidDataType;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.listing.*;
+import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.pcode.*;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.util.AcyclicCallGraphBuilder;
@@ -82,7 +83,8 @@ public class DecompilerParameterIdCmd extends BackgroundCommand {
 
 			GThreadPool pool = AutoAnalysisManager.getSharedAnalsysThreadPool();
 			queue = new ConcurrentGraphQ<>(runnable, graph, pool, monitor);
-			resetFunctionSourceTypes(graph.getValues());
+
+			resetFunctionSourceTypes(graph.getValues(), monitor);
 
 			monitor.setMessage(getName() + " - analyzing...");
 			monitor.initialize(graph.size());
@@ -116,16 +118,27 @@ public class DecompilerParameterIdCmd extends BackgroundCommand {
 	 */
 	private boolean funcIsExternalGlue(Function func) {
 		String blockName = program.getMemory().getBlock(func.getEntryPoint()).getName();
-		return (blockName.equals("EXTERNAL") || blockName.equals(".plt") ||
+		return (blockName.equals(MemoryBlock.EXTERNAL_BLOCK_NAME) || blockName.equals(".plt") ||
 			blockName.equals("__stub_helper"));
 	}
 
-	private void resetFunctionSourceTypes(Set<Address> set) {
+	private void resetFunctionSourceTypes(Set<Address> set, TaskMonitor monitor)
+			throws CancelledException {
+
 		FunctionManager functionManager = program.getFunctionManager();
-		//For those functions that we will process, appropriately clear SourceType, meaning
+		// For those functions that we will process, appropriately clear SourceType, meaning
 		// move ANALYSIS (or other, depending on ClearLevel) SourceType back to DEFAULT SourceType,
-		// but keep higher SoureTypes fixed.  Should we do this for individual parameters and returns too? --> yes/no TODO
+		// but keep higher SoureTypes fixed.  Should we do this for individual parameters and
+		// returns too? --> yes/no TODO
+
+		monitor.setMessage(getName() + " - resetting function source types...");
+		monitor.initialize(set.size());
+
 		for (Address entryPoint : set) {
+
+			monitor.checkCanceled();
+			monitor.incrementProgress(1);
+
 			Function func = functionManager.getFunctionAt(entryPoint);
 			try {
 				//Do not clear prototypes of "pseudo-analyzed" external functions.
@@ -151,7 +164,7 @@ public class DecompilerParameterIdCmd extends BackgroundCommand {
 			}
 			catch (InvalidInputException e) {
 				Msg.warn(this,
-					"Error changing signature SourceType on--" + func.getName(), e);
+					"Error changing signature SourceType on " + func.getName(), e);
 			}
 		}
 	}
@@ -250,7 +263,7 @@ public class DecompilerParameterIdCmd extends BackgroundCommand {
 
 	/**
 	 * Check for consistency of returned results.  Trying to propagate, don't want to propagate garbage.
-	 *  
+	 * 
 	 * @param decompRes the decompile result
 	 * @return true if inconsistent results
 	 */
@@ -321,7 +334,7 @@ public class DecompilerParameterIdCmd extends BackgroundCommand {
 
 //==================================================================================================
 // Inner Classes
-//==================================================================================================	
+//==================================================================================================
 
 	private class DecompilerFactory extends CountingBasicFactory<DecompInterface> {
 

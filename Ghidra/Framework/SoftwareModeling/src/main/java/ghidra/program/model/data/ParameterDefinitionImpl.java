@@ -79,17 +79,22 @@ public class ParameterDefinitionImpl implements ParameterDefinition {
 					dataType.getName());
 		}
 		dataType = dataType.clone(dtMgr != null ? dtMgr : dataType.getDataTypeManager());
-		if (!dataType.isDynamicallySized() && dataType.getLength() < 0) {
+		if (dataType.getLength() < 0) {
 			throw new IllegalArgumentException(kind +
 				" type must be specified with fixed-length data type: " + dataType.getName());
 		}
-		if (dataType instanceof VoidDataType) {
+		DataType baseType = dataType;
+		if(baseType instanceof TypedefDataType) {
+			baseType = ((TypedefDataType)baseType).getBaseDataType();
+		}
+		
+		if (baseType instanceof VoidDataType) {
 			if (!isReturn) {
 				throw new IllegalArgumentException(
 					"Parameter type may not specify the void datatype - empty parameter list should be used");
 			}
 		}
-		else if (!(dataType instanceof Composite) && dataType.getLength() == 0) {
+		else if (dataType.getLength() == 0) {
 			throw new IllegalArgumentException(kind +
 				" type must be specified with fixed-length data type: " + dataType.getName());
 		}

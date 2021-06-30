@@ -29,6 +29,7 @@ import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.ProgramLocation;
 import ghidra.program.util.ProgramSelection;
+import ghidra.util.Swing;
 import ghidra.util.SystemUtilities;
 
 /**
@@ -64,7 +65,9 @@ public class GhidraState {
 		this.currentHighlight = highlight;
 		this.isGlobalState = true;
 		if (!SystemUtilities.isInHeadlessMode()) {
-			gatherParamPanel = new GatherParamPanel(this);
+			Swing.runNow(() -> {
+				gatherParamPanel = new GatherParamPanel(this);
+			});
 		}
 	}
 
@@ -195,7 +198,7 @@ public class GhidraState {
 	}
 
 	/**
-	 * Set the current selection and fire a {@link kProgramSelectionPluginEvent}.
+	 * Set the current selection and fire a {@link ProgramSelectionPluginEvent}.
 	 * 
 	 * @param selection the selection
 	 */

@@ -90,11 +90,11 @@ class HeritageInfo {
   int4 deadremoved;		///< >0 if Varnodes in this space have been eliminated
   bool loadGuardSearch;		///< \b true if the search for LOAD ops to guard has been performed
   bool warningissued;		///< \b true if warning issued previously
-  void set(AddrSpace *spc,int4 dl,int4 dcdl) {
-    space=spc; delay=dl; deadcodedelay=dcdl; deadremoved=0; warningissued=false; loadGuardSearch = false; } ///< Set all fields
+  bool hasCallPlaceholders;	///< \b true for the \e stack space, if stack placeholders have not been removed
   bool isHeritaged(void) const { return (space != (AddrSpace *)0); }	///< Return \b true if heritage is performed on this space
-  void reset(void) {
-    deadremoved = 0; deadcodedelay = delay; warningissued = false; loadGuardSearch = false; }	///< Reset
+  void reset(void);		///< Reset the state
+public:
+  HeritageInfo(AddrSpace *spc);	///< Constructor
 };
 
 /// \brief Description of a LOAD operation that needs to be guarded
@@ -222,6 +222,7 @@ class Heritage {
   /// \brief Get the heritage status for the given address space
   const HeritageInfo *getInfo(AddrSpace *spc) const { return &(infolist[spc->getIndex()]); }
 
+  void clearStackPlaceholders(HeritageInfo *info);	///< Clear remaining stack placeholder LOADs on any call
   void splitJoinLevel(vector<Varnode *> &lastcombo,vector<Varnode *> &nextlev,JoinRecord *joinrec);
   void splitJoinRead(Varnode *vn,JoinRecord *joinrec);
   void splitJoinWrite(Varnode *vn,JoinRecord *joinrec);
@@ -229,7 +230,8 @@ class Heritage {
   void floatExtensionWrite(Varnode *vn,JoinRecord *joinrec);
   void processJoins(void);
   void buildADT(void);		///< Build the augmented dominator tree
-  int4 collect(Address addr,int4 size,vector<Varnode *> &read,vector<Varnode *> &write,vector<Varnode *> &input) const;
+  void removeRevisitedMarkers(const vector<Varnode *> &remove,const Address &addr,int4 size);
+  int4 collect(Address addr,int4 size,vector<Varnode *> &read,vector<Varnode *> &write,vector<Varnode *> &input,vector<Varnode *> &remove) const;
   bool callOpIndirectEffect(const Address &addr,int4 size,PcodeOp *op) const;
   Varnode *normalizeReadSize(Varnode *vn,const Address &addr,int4 size);
   Varnode *normalizeWriteSize(Varnode *vn,const Address &addr,int4 size);

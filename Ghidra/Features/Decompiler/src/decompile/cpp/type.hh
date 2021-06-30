@@ -342,7 +342,8 @@ class TypeCode : public Datatype {
 protected:
   friend class TypeFactory;
   FuncProto *proto;		///< If non-null, this describes the prototype of the underlying function
-  void set(ProtoModel *model,
+  TypeFactory *factory;		///< Factory owning \b this
+  void set(TypeFactory *tfact,ProtoModel *model,
 	   Datatype *outtype,const vector<Datatype *> &intypes,
 	   bool dotdotdot,Datatype *voidtype);	///< Establish a function pointer
   virtual void restoreXml(const Element *el,TypeFactory &typegrp);
@@ -354,6 +355,7 @@ public:
   void setProperties(bool isConstructor,bool isDestructor);	///< Set additional function properties
   virtual ~TypeCode(void);
   virtual void printRaw(ostream &s) const;
+  virtual Datatype *getSubType(uintb off,uintb *newoff) const;
   virtual int4 compare(const Datatype &op,int4 level) const;
   virtual int4 compareDependency(const Datatype &op) const;
   virtual Datatype *clone(void) const { return new TypeCode(*this); }
@@ -413,7 +415,7 @@ class TypeFactory {
 protected:
   Architecture *glb;		///< The Architecture object that owns this TypeFactory
   Datatype *findByIdLocal(const string &nm,uint8 id) const;	///< Search locally by name and id
-  virtual Datatype *findById(const string &n,uint8 id);		///< Search by name and id
+  virtual Datatype *findById(const string &n,uint8 id,int4 sz);		///< Search by \e name and/or \e id
 public:
   TypeFactory(Architecture *g);	///< Construct a factory
   void setupSizes(void);	///< Derive some size information from Architecture

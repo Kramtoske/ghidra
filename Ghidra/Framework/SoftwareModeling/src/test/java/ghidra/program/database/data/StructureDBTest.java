@@ -22,6 +22,8 @@ import static org.junit.Assert.*;
 
 import org.junit.*;
 
+import com.google.common.collect.Sets;
+
 import generic.test.AbstractGTest;
 import ghidra.program.model.data.*;
 import ghidra.util.InvalidNameException;
@@ -83,6 +85,34 @@ public class StructureDBTest extends AbstractGTest {
 
 	private Pointer createPointer(DataType dataType, int length) {
 		return (Pointer) dataMgr.resolve(new Pointer32DataType(dataType), null);
+	}
+
+	@Test
+	public void testEmpty() throws Exception {
+		Structure s = new StructureDataType("foo", 0);
+		assertTrue(s.isNotYetDefined());
+		assertTrue(s.isZeroLength());
+		assertEquals(0, s.getNumComponents());
+		assertEquals(0, s.getNumDefinedComponents());
+		Structure s2 = (Structure) dataMgr.resolve(s, null);
+		assertTrue(s2.isNotYetDefined());
+		assertTrue(s2.isZeroLength());
+		assertEquals(0, s2.getNumComponents());
+		assertEquals(0, s.getNumDefinedComponents());
+	}
+
+	@Test
+	public void testSizeOne() throws Exception {
+		Structure s = new StructureDataType("foo", 1);
+		assertFalse(s.isNotYetDefined());
+		assertFalse(s.isZeroLength());
+		assertEquals(1, s.getNumComponents());
+		assertEquals(0, s.getNumDefinedComponents());
+		Structure s2 = (Structure) dataMgr.resolve(s, null);
+		assertFalse(s2.isNotYetDefined());
+		assertFalse(s2.isZeroLength());
+		assertEquals(1, s2.getNumComponents());
+		assertEquals(0, s2.getNumDefinedComponents());
 	}
 
 	@Test
@@ -418,7 +448,7 @@ public class StructureDBTest extends AbstractGTest {
 	@Test
 	public void testSetFlexArray() throws Exception {
 
-		struct.setInternallyAligned(true);
+		struct.setPackingEnabled(true);
 
 		struct.delete(2); // remove dword to verify flex array alignment below
 
@@ -426,7 +456,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -440,7 +470,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -454,7 +484,7 @@ public class StructureDBTest extends AbstractGTest {
 	@Test
 	public void testZeroBitFields() throws Exception {
 
-		struct.setInternallyAligned(true);
+		struct.setPackingEnabled(true);
 
 		struct.delete(2); // remove dword to verify flex array alignment below
 
@@ -464,7 +494,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   int:3(0)   1   bf1   \"bf1Comment\"\n" + 
 			"   4   int:0(0)   1      \"zero bitfield 1\"\n" + 
@@ -480,7 +510,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   int:3(0)   1   bf1   \"bf1Comment\"\n" + 
 			"   4   int:0(0)   1      \"zero bitfield 1\"\n" + 
@@ -501,7 +531,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -519,7 +549,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -538,7 +568,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -561,7 +591,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -581,7 +611,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -606,7 +636,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -625,7 +655,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -645,7 +675,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -673,7 +703,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -692,7 +722,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-				"Unaligned\n" + 
+				"pack(disabled)\n" + 
 				"Structure Test {\n" + 
 				"   0   byte   1   field1   \"Comment1\"\n" + 
 //				"   1   undefined   1   null   \"\"\n" + 
@@ -727,7 +757,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -746,7 +776,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -766,7 +796,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -785,7 +815,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -804,7 +834,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" +  
@@ -835,7 +865,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1060,7 +1090,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -1077,7 +1107,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -1094,7 +1124,7 @@ public class StructureDBTest extends AbstractGTest {
 	@Test
 	public void testReplaceFlexArrayDependency() throws DataTypeDependencyException {
 
-		struct.setInternallyAligned(true);
+		struct.setPackingEnabled(true);
 
 		struct.delete(2); // remove dword to verify flex array alignment below
 
@@ -1105,7 +1135,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -1122,7 +1152,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -1137,7 +1167,7 @@ public class StructureDBTest extends AbstractGTest {
 	public void testReplaceBitFieldDependency()
 			throws InvalidDataTypeException, DataTypeDependencyException {
 
-		struct.setInternallyAligned(true);
+		struct.setPackingEnabled(true);
 
 		TypeDef td = new TypedefDataType("Foo", IntegerDataType.dataType);
 		td = (TypeDef) dataMgr.resolve(td, null);
@@ -1148,7 +1178,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -1165,7 +1195,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Aligned\n" + 
+			"pack()\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   2   word   2   null   \"Comment2\"\n" + 
@@ -1182,7 +1212,7 @@ public class StructureDBTest extends AbstractGTest {
 	@Test
 	public void testReplaceWith() throws InvalidDataTypeException {
 
-		// NOTE: unaligned bitfields should remain unchanged when
+		// NOTE: non-packed bitfields should remain unchanged when
 		// transitioning endianess even though it makes little sense.
 		// Unaligned structures are not intended to be portable! 
 
@@ -1198,7 +1228,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -1222,7 +1252,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/bigStruct\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure bigStruct {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 			"   1   word   2   null   \"Comment2\"\n" + 
@@ -1240,6 +1270,129 @@ public class StructureDBTest extends AbstractGTest {
 	}
 
 	@Test
+	public void testReplaceWithConflict() {
+
+		// Test case where structure BAR contains a not-yet-defined structure FOO (impl)
+		// which has previously been resolved as fully defined.  Test verifies that resolving
+		// BAR properly handles the conflict replacement of the FOO component with a larger
+		// fully defined datatype.
+
+		Structure fooNotYetDefined = new StructureDataType("FOO", 0);
+
+		Structure fooDefined = new StructureDataType("FOO", 0);
+		fooDefined.add(new ArrayDataType(ByteDataType.dataType, 20, 1));
+		fooDefined = (Structure) dataMgr.resolve(fooDefined, null);
+
+		Structure barStruct = new StructureDataType("BAR", 40);
+		barStruct.replaceAtOffset(0, fooNotYetDefined, -1, "f1", null);
+		barStruct.replaceAtOffset(10, ByteDataType.dataType, 1, "f2", null);
+
+		barStruct = (Structure) dataMgr.resolve(barStruct,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+
+		//@formatter:off
+		CompositeTestUtils.assertExpectedComposite(this, "/BAR\n" + 
+			"pack(disabled)\n" + 
+			"Structure BAR {\n" + 
+			"   0   FOO   10   f1   \"\"\n" + 
+			"   10   byte   1   f2   \"\"\n" + 
+			"}\n" + 
+			"Size = 40   Actual Alignment = 1", barStruct);
+		//@formatter:on
+
+		DataTypeComponent dtc1 = barStruct.getDefinedComponents()[1];
+		assertEquals(1, dtc1.getOrdinal());
+		assertEquals(dtc1, barStruct.getComponent(1));
+	}
+
+	@Test
+	public void testReplaceWithConflict2() {
+
+		// Test case where structure BAR contains a not-yet-defined structure FOO (impl)
+		// which has previously been resolved as fully defined.  Test verifies that resolving
+		// BAR properly handles the conflict replacement of the FOO component with a larger
+		// fully defined datatype.
+
+		Structure fooNotYetDefined = new StructureDataType("FOO", 0);
+
+		Structure fooDefined = new StructureDataType("FOO", 0);
+		fooDefined.add(new ArrayDataType(ByteDataType.dataType, 5, 1));
+		fooDefined = (Structure) dataMgr.resolve(fooDefined, null);
+
+		Structure barStruct = new StructureDataType("BAR", 40);
+		barStruct.replaceAtOffset(0, fooNotYetDefined, -1, "f1", null);
+		barStruct.replaceAtOffset(10, ByteDataType.dataType, 1, "f2", null);
+
+		barStruct = (Structure) dataMgr.resolve(barStruct,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+
+		//@formatter:off
+		CompositeTestUtils.assertExpectedComposite(this, "/BAR\n" + 
+			"pack(disabled)\n" + 
+			"Structure BAR {\n" + 
+			"   0   FOO   5   f1   \"\"\n" + 
+			"   10   byte   1   f2   \"\"\n" + 
+			"}\n" + 
+			"Size = 40   Actual Alignment = 1", barStruct);
+		//@formatter:on
+
+		DataTypeComponent dtc1 = barStruct.getDefinedComponents()[1];
+		assertEquals(6, dtc1.getOrdinal());
+		assertEquals(dtc1, barStruct.getComponent(6));
+
+	}
+
+	@Test
+	public void testDeleteMany() throws InvalidDataTypeException {
+
+		struct.insertBitFieldAt(2, 4, 0, IntegerDataType.dataType, 3, "bf1", "bf1Comment");
+		struct.insertBitFieldAt(2, 4, 3, IntegerDataType.dataType, 3, "bf2", "bf2Comment");
+		struct.insertBitFieldAt(2, 4, 6, IntegerDataType.dataType, 15, "bf3", "bf3Comment");
+		struct.insertBitFieldAt(2, 4, 21, IntegerDataType.dataType, 11, "bf4", "bf4Comment");
+
+		//@formatter:off
+		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
+			"pack(disabled)\n" + 
+			"Structure Test {\n" + 
+			"   0   byte   1   field1   \"Comment1\"\n" + 
+//					"   1   undefined   1   null   \"\"\n" + 
+			"   2   int:3(0)   1   bf1   \"bf1Comment\"\n" + 
+			"   2   int:3(3)   1   bf2   \"bf2Comment\"\n" + 
+			"   2   int:15(6)   3   bf3   \"bf3Comment\"\n" + 
+			"   4   int:11(5)   2   bf4   \"bf4Comment\"\n" + 
+			"   6   word   2   null   \"Comment2\"\n" + 
+			"   8   dword   4   field3   \"\"\n" + 
+			"   12   byte   1   field4   \"Comment4\"\n" + 
+			"}\n" + 
+			"Size = 13   Actual Alignment = 1", struct);
+		//@formatter:on
+
+		struct.delete(Sets.newHashSet(1, 2, 3, 4, 5, 6));
+
+		//@formatter:off
+		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
+			"pack(disabled)\n" + 
+			"Structure Test {\n" + 
+			"   0   byte   1   field1   \"Comment1\"\n" + 
+//					"   1   undefined   1   null   \"\"\n" + 
+//					"   2   undefined   1   null   \"\"\n" + 
+//					"   3   undefined   1   null   \"\"\n" + 
+//					"   4   undefined   1   null   \"\"\n" + 
+			"   5   dword   4   field3   \"\"\n" + 
+			"   9   byte   1   field4   \"Comment4\"\n" + 
+			"}\n" + 
+			"Size = 10   Actual Alignment = 1", struct);
+		//@formatter:on
+
+		assertEquals(10, struct.getLength());
+		assertEquals(7, struct.getNumComponents());
+		assertEquals(3, struct.getNumDefinedComponents());
+		DataTypeComponent[] comps = struct.getDefinedComponents();
+		assertEquals(DWordDataType.class, comps[1].getDataType().getClass());
+		assertEquals(5, comps[1].getOffset());
+	}
+
+	@Test
 	public void testDelete() throws InvalidDataTypeException {
 
 		struct.insertBitFieldAt(2, 4, 0, IntegerDataType.dataType, 3, "bf1", "bf1Comment");
@@ -1249,7 +1402,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1268,7 +1421,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1286,7 +1439,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1303,7 +1456,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1320,7 +1473,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1338,7 +1491,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1356,7 +1509,7 @@ public class StructureDBTest extends AbstractGTest {
 
 		//@formatter:off
 		CompositeTestUtils.assertExpectedComposite(this, "/Test\n" + 
-			"Unaligned\n" + 
+			"pack(disabled)\n" + 
 			"Structure Test {\n" + 
 			"   0   byte   1   field1   \"Comment1\"\n" + 
 //			"   1   undefined   1   null   \"\"\n" + 
@@ -1422,6 +1575,7 @@ public class StructureDBTest extends AbstractGTest {
 		s.deleteAll();
 		assertEquals(1, s.getLength());
 		assertTrue(s.isNotYetDefined());
+		assertTrue(s.isZeroLength());
 		assertEquals(0, s.getNumComponents());
 	}
 

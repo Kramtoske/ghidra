@@ -1782,6 +1782,7 @@ void ActionReturnRecovery::buildReturnOutput(ParamActive *active,PcodeOp *retop,
     PcodeOp *newop = data.newOp(2,retop->getAddr());
     data.opSetOpcode(newop,CPUI_PIECE);
     Varnode *newwhole = data.newVarnodeOut(trialhi.getSize()+triallo.getSize(),joinaddr,newop);
+    newwhole->setWriteMask();		// Don't let new Varnode cause additional heritage
     data.opInsertBefore(newop,retop);
     newparam.pop_back();
     newparam.back() = newwhole;
@@ -1813,7 +1814,8 @@ void ActionReturnRecovery::buildReturnOutput(ParamActive *active,PcodeOp *retop,
 	if (vn->getAddr() < addr)
 	  addr = vn->getAddr();
 	Varnode *newout = data.newVarnodeOut(preexist->getSize()+vn->getSize(),addr,newop);
-	data.opSetInput(newop,vn,0); // Most sig part
+	newout->setWriteMask();		// Don't let new Varnode cause additional heritage
+	data.opSetInput(newop,vn,0);	// Most sig part
 	data.opSetInput(newop,preexist,1);
 	data.opInsertBefore(newop,retop);
 	preexist = newout;
@@ -1850,7 +1852,7 @@ int4 ActionReturnRecovery::apply(Funcdata &data)
 	int4 slot = trial.getSlot();
 	vn = op->getIn(slot);
 	if (ancestorReal.execute(op,slot,&trial,false))
-	  if (data.ancestorOpUse(maxancestor,vn,op,trial))
+	  if (data.ancestorOpUse(maxancestor,vn,op,trial,0))
 	    trial.markActive(); // This varnode sees active use as a parameter
 	count += 1;
       }
@@ -3475,9 +3477,10 @@ bool ActionDeadCode::isEventualConstant(Varnode *vn,int4 addCount,int4 loadCount
 /// \brief Check if there are any unconsumed LOADs that may be from volatile addresses.
 ///
 /// It may be too early to remove certain LOAD operations even though their result isn't
-/// consumed because it be of a volatile address with side effects.  If a LOAD meets this
+/// consumed because it may be of a volatile address with side effects.  If a LOAD meets this
 /// criteria, it is added to the worklist and \b true is returned.
 /// \param data is the function being analyzed
+/// \param worklist is the container of consumed Varnodes to further process
 /// \return \b true if there was at least one LOAD added to the worklist
 bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
 
@@ -4244,7 +4247,7 @@ Datatype *ActionInferTypes::propagateAddIn2Out(TypeFactory *typegrp,PcodeOp *op,
   int4 offset = propagateAddPointer(op,inslot);
   if (offset==-1) return op->getOut()->getTempType(); // Doesn't look like a good pointer add
   uintb uoffset = AddrSpace::addressToByte(offset,((TypePointer *)rettype)->getWordSize());
-  if (tstruct->getSize() > 0)
+  if (tstruct->getSize() > 0 && !tstruct->isVariableLength())
     uoffset = uoffset % tstruct->getSize();
   if (uoffset==0) {
     if (op->code() == CPUI_PTRSUB) // Go down at least one level
@@ -4302,6 +4305,8 @@ bool ActionInferTypes::propagateGoodEdge(PcodeOp *op,int4 inslot,int4 outslot,Va
   case CPUI_MULTIEQUAL:
     if ((inslot!=-1)&&(outslot!=-1)) return false; // Must propagate input <-> output
     break;
+  case CPUI_INT_SLESS:
+  case CPUI_INT_SLESSEQUAL:
   case CPUI_INT_LESS:
   case CPUI_INT_LESSEQUAL:
     if ((inslot==-1)||(outslot==-1)) return false; // Must propagate input <-> input
@@ -4397,6 +4402,11 @@ bool ActionInferTypes::propagateTypeEdge(TypeFactory *typegrp,PcodeOp *op,int4 i
     else
       newtype = alttype;
     break;
+  case CPUI_INT_SLESS:
+  case CPUI_INT_SLESSEQUAL:
+    if (alttype->getMetatype() != TYPE_INT) return false;	// Only propagate signed things
+    newtype = alttype;
+    break;
   case CPUI_NEW:
     {
       Varnode *invn = op->getIn(0);
@@ -4419,7 +4429,7 @@ bool ActionInferTypes::propagateTypeEdge(TypeFactory *typegrp,PcodeOp *op,int4 i
     }
     else if (alttype->getMetatype()==TYPE_PTR) {
       newtype = ((TypePointer *)alttype)->getPtrTo();
-      if (newtype->getSize() != outvn->getTempType()->getSize()) // Size must be appropriate
+      if (newtype->getSize() != outvn->getTempType()->getSize() || newtype->isVariableLength()) // Size must be appropriate
 	newtype = outvn->getTempType();
     }
     else
@@ -4432,7 +4442,7 @@ bool ActionInferTypes::propagateTypeEdge(TypeFactory *typegrp,PcodeOp *op,int4 i
     }
     else if (alttype->getMetatype()==TYPE_PTR) {
       newtype = ((TypePointer *)alttype)->getPtrTo();
-      if (newtype->getSize() != outvn->getTempType()->getSize())
+      if (newtype->getSize() != outvn->getTempType()->getSize() || newtype->isVariableLength())
 	newtype = outvn->getTempType();
     }
     else
@@ -4530,7 +4540,7 @@ void ActionInferTypes::propagateOneType(TypeFactory *typegrp,Varnode *vn)
   PropagationState *ptr;
   vector<PropagationState> state;
 
-  state.push_back(PropagationState(vn));
+  state.emplace_back(vn);
   vn->setMark();
 
   while(!state.empty()) {
@@ -4543,7 +4553,7 @@ void ActionInferTypes::propagateOneType(TypeFactory *typegrp,Varnode *vn)
       if (propagateTypeEdge(typegrp,ptr->op,ptr->inslot,ptr->slot)) {
 	vn = (ptr->slot==-1) ? ptr->op->getOut() : ptr->op->getIn(ptr->slot);
 	ptr->step();		// Make sure to step before push_back
-	state.push_back(PropagationState(vn));
+	state.emplace_back(vn);
 	vn->setMark();
       }
       else
@@ -5018,6 +5028,7 @@ void ActionDatabase::universalAction(Architecture *conf)
 	actprop->addRule( new RulePiece2Zext("analysis") );
 	actprop->addRule( new RulePiece2Sext("analysis") );
 	actprop->addRule( new RulePopcountBoolXor("analysis") );
+	actprop->addRule( new RuleXorSwap("analysis") );
 	actprop->addRule( new RuleSubvarAnd("subvar") );
 	actprop->addRule( new RuleSubvarSubpiece("subvar") );
 	actprop->addRule( new RuleSplitFlow("subvar") );
@@ -5097,6 +5108,7 @@ void ActionDatabase::universalAction(Architecture *conf)
   act->addAction( actcleanup );
 
   act->addAction( new ActionPreferComplement("blockrecovery") );
+  act->addAction( new ActionStructureTransform("blockrecovery") );
   act->addAction( new ActionNormalizeBranches("normalizebranches") );
   act->addAction( new ActionAssignHigh("merge") );
   act->addAction( new ActionMergeRequired("merge") );

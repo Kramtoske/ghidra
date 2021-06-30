@@ -395,6 +395,122 @@ public class ConflictHandlerTest extends AbstractGhidraHeadedIntegrationTest {
 			struct1a_pathname, struct1b_pathname);
 	}
 
+	/**
+	 * Tests the
+	 * {@link DataTypeConflictHandler#REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER RESORAAH}
+	 * conflict handler to be sure that, if all else is the same, the packed version is chosen
+	 * over the non-packed version.
+	 * <p>
+	 * Success is the packed version is chosen over the non-packed version.
+	 */
+	@Test
+	public void testChooseNewPackedOverExistingNonPackedWhenAllElseIsEqualForEmptyStructures() {
+		// NonPacked exists first.
+		Structure empty1NonPacked = new StructureDataType(root, "empty1", 0, dataMgr);
+		Composite empty1PackedToAdd = (Composite) empty1NonPacked.copy(dataMgr);
+		empty1PackedToAdd.setPackingEnabled(true);
+
+		String empty1NonPackedString = empty1NonPacked.toString();
+		String empty1PackedToAddString = empty1PackedToAdd.toString();
+
+		Structure empty1AddResult = (Structure) dataMgr.addDataType(empty1PackedToAdd,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+		String empty1AddResultString = empty1AddResult.toString();
+		assertEquals(empty1PackedToAddString, empty1AddResultString);
+		assertNotEquals(empty1NonPackedString, empty1AddResultString);
+	}
+
+	/**
+	 * Tests the
+	 * {@link DataTypeConflictHandler#REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER RESORAAH}
+	 * conflict handler to be sure that, if all else is the same, the packed version is chosen
+	 * over the non-packed version.
+	 * <p>
+	 * Success is the packed version is chosen over the non-packed version.
+	 */
+	@Test
+	public void testChooseNewPackedOverExistingNonPackedWhenAllElseIsEqualForNonEmptyStructures() {
+		// NonPacked exists first.
+		StructureDataType struct1NonPacked = createPopulated(dataMgr);
+		Composite struct1PackedToAdd = (Composite) struct1NonPacked.copy(dataMgr);
+		struct1PackedToAdd.setPackingEnabled(true);
+
+		String struct1NonPackedString = struct1NonPacked.toString();
+		String struct1PackedToAddString = struct1PackedToAdd.toString();
+
+		Structure struct1AddResult = (Structure) dataMgr.addDataType(struct1PackedToAdd,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+		String struct1AddResultString = struct1AddResult.toString();
+		assertEquals(struct1PackedToAddString, struct1AddResultString);
+		assertNotEquals(struct1NonPackedString, struct1AddResultString);
+	}
+
+	/**
+	 * Tests the
+	 * {@link DataTypeConflictHandler#REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER RESORAAH}
+	 * conflict handler to be sure that, if all else is the same, the new non-packed version is
+	 * chosen over the existing non-packed version.
+	 * <p>
+	 * Success is the new non-packed version is chosen over the existing packed version.
+	 */
+	// TODO: consider whether we want to change the logic of the conflict handler to favor
+	//  packed over non-packed.
+	@Test
+	public void testChooseNewNonPackedOverExistingPackedWhenAllElseIsEqualForEmptyStructures() {
+
+		// Packed exists first.
+		Structure empty2Packed = new StructureDataType(root, "empty2", 0, dataMgr);
+		Composite empty2NonPackedToAdd = (Composite) empty2Packed.copy(dataMgr);
+		// aligning only after making non-packed copy.
+		empty2Packed.setPackingEnabled(true);
+
+		String empty2PackedString = empty2Packed.toString();
+		String empty2NonPackedToAddString = empty2NonPackedToAdd.toString();
+
+		Structure empty2AddResult = (Structure) dataMgr.addDataType(empty2NonPackedToAdd,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+		String empty2AddResultString = empty2AddResult.toString();
+		assertEquals(empty2NonPackedToAddString, empty2AddResultString);
+		assertNotEquals(empty2PackedString, empty2AddResultString);
+	}
+
+	/**
+	 * Tests the
+	 * {@link DataTypeConflictHandler#REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER RESORAAH}
+	 * conflict handler to be sure that, if all else is the same, the new non-packed version is
+	 * chosen over the existing packed version.
+	 * <p>
+	 * Success is the new non-packed version is chosen over the existing packed version.
+	 */
+	// TODO: consider whether we want to change the logic of the conflict handler to favor
+	//  packed over non-packed.
+	@Test
+	public void testChooseNewNonPackedOverExistingPackedWhenAllElseIsEqualForNonEmptyStructures() {
+
+		// Packed exists first.
+		StructureDataType struct2Packed = createPopulated(dataMgr);
+		Composite struct2NonPackedToAdd = (Composite) struct2Packed.copy(dataMgr);
+		// aligning only after making non-packed copy.
+		struct2Packed.setPackingEnabled(true);
+
+		String struct2PackedString = struct2Packed.toString();
+		String struct2NonPackedToAddString = struct2NonPackedToAdd.toString();
+
+		Structure struct2AddResult = (Structure) dataMgr.addDataType(struct2NonPackedToAdd,
+			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER);
+		String struct2AddResultString = struct2AddResult.toString();
+		assertEquals(struct2NonPackedToAddString, struct2AddResultString);
+		assertNotEquals(struct2PackedString, struct2AddResultString);
+	}
+
+	/**
+	 * Tests the
+	 * {@link DataTypeConflictHandler#REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER RESORAAH}
+	 * conflict handler to be sure that, if all else is the same, the packed version is chosen
+	 * over the non-packed version.
+	 * <p>
+	 * Success is the packed version is chosen over the non-packed version.
+	 */
 	@Test
 	public void testResolveDataTypeNonStructConflict() throws Exception {
 		DataTypeManager dtm = new StandAloneDataTypeManager("Test");

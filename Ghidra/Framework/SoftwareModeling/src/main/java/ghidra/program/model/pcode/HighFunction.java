@@ -79,14 +79,15 @@ public class HighFunction extends PcodeSyntaxTree {
 	}
 
 	/**
-	 * Get the id with the associated function symbol, if it exists
-	 * @return the id or 0 otherwise
+	 * Get the id with the associated function symbol, if it exists.
+	 * Otherwise return a dynamic id based on the entry point.
+	 * @return the symbol id, or possibly a dynamic id
 	 */
 	public long getID() {
 		if (func instanceof FunctionDB) {
 			return func.getSymbol().getID();
 		}
-		return 0;
+		return func.getProgram().getSymbolTable().getDynamicSymbolID(func.getEntryPoint());
 	}
 
 	/**
@@ -182,7 +183,7 @@ public class HighFunction extends PcodeSyntaxTree {
 					JumpTable jumpTab = JumpTable.readOverride((Namespace) obj, symtab);
 					if (jumpTab != null) {
 						if (jumpTables == null) {
-							jumpTables = new ArrayList<JumpTable>();
+							jumpTables = new ArrayList<>();
 						}
 						jumpTables.add(jumpTab);
 					}
@@ -193,7 +194,7 @@ public class HighFunction extends PcodeSyntaxTree {
 					DataTypeSymbol protover = HighFunctionDBUtil.readOverride(sym);
 					if (protover != null) {
 						if (protoOverrides == null) {
-							protoOverrides = new ArrayList<DataTypeSymbol>();
+							protoOverrides = new ArrayList<>();
 						}
 						protoOverrides.add(protover);
 					}
@@ -258,14 +259,13 @@ public class HighFunction extends PcodeSyntaxTree {
 		XmlElement start = parser.start("function");
 		String name = start.getAttribute("name");
 		if (!func.getName().equals(name)) {
-			throw new PcodeXMLException(
-				"Function name mismatch: " + func.getName() + " + " + name);
+			throw new PcodeXMLException("Function name mismatch: " + func.getName() + " + " + name);
 		}
 		while (!parser.peek().isEnd()) {
 			XmlElement subel = parser.peek();
 			if (subel.getName().equals("addr")) {
 				subel = parser.start("addr");
-				Address addr = Varnode.readXMLAddress(subel, getAddressFactory());
+				Address addr = AddressXML.readXML(subel, getAddressFactory());
 				parser.end(subel);
 				addr = func.getEntryPoint().getAddressSpace().getOverlayAddress(addr);
 				if (!func.getEntryPoint().equals(addr)) {
@@ -317,7 +317,7 @@ public class HighFunction extends PcodeSyntaxTree {
 			table.restoreXml(parser, getAddressFactory());
 			if (!table.isEmpty()) {
 				if (jumpTables == null) {
-					jumpTables = new ArrayList<JumpTable>();
+					jumpTables = new ArrayList<>();
 				}
 				jumpTables.add(table);
 			}
@@ -351,8 +351,8 @@ public class HighFunction extends PcodeSyntaxTree {
 	 */
 	public HighVariable splitOutMergeGroup(HighVariable high, Varnode vn) throws PcodeException {
 		try {
-			ArrayList<Varnode> newinst = new ArrayList<Varnode>();
-			ArrayList<Varnode> oldinst = new ArrayList<Varnode>();
+			ArrayList<Varnode> newinst = new ArrayList<>();
+			ArrayList<Varnode> oldinst = new ArrayList<>();
 			short ourgroup = vn.getMergeGroup();
 			Varnode[] curinst = high.getInstances();
 			for (Varnode curvn : curinst) {
@@ -456,10 +456,10 @@ public class HighFunction extends PcodeSyntaxTree {
 		}
 		resBuf.append(">\n");
 		if (entryPoint == null) {
-			resBuf.append(Varnode.buildXMLAddress(func.getEntryPoint()));
+			AddressXML.buildXML(resBuf, func.getEntryPoint());
 		}
 		else {
-			resBuf.append(Varnode.buildXMLAddress(entryPoint)); // Address is forced on XML
+			AddressXML.buildXML(resBuf, entryPoint);		// Address is forced on XML
 		}
 		localSymbols.buildLocalDbXML(resBuf, namespace);
 		proto.buildPrototypeXML(resBuf, getDataTypeManager());
@@ -481,9 +481,7 @@ public class HighFunction extends PcodeSyntaxTree {
 				FunctionPrototype fproto = new FunctionPrototype(
 					(FunctionSignature) sym.getDataType(), compilerSpec, false);
 				resBuf.append("<protooverride>\n");
-				resBuf.append("<addr");
-				Varnode.appendSpaceOffset(resBuf, addr);
-				resBuf.append("/>\n");
+				AddressXML.buildXML(resBuf, addr);
 				fproto.buildPrototypeXML(resBuf, dtmanage);
 				resBuf.append("</protooverride>\n");
 			}
@@ -531,7 +529,7 @@ public class HighFunction extends PcodeSyntaxTree {
 
 	public static void createLabelSymbol(SymbolTable symtab, Address addr, String name,
 			Namespace namespace, SourceType source, boolean useLocalNamespace)
-					throws InvalidInputException {
+			throws InvalidInputException {
 		if (namespace == null && useLocalNamespace) {
 			namespace = symtab.getNamespace(addr);
 		}
@@ -559,8 +557,8 @@ public class HighFunction extends PcodeSyntaxTree {
 	public static boolean clearNamespace(SymbolTable symtab, Namespace space)
 			throws InvalidInputException {
 		SymbolIterator iter = symtab.getSymbols(space);
-		ArrayList<Address> addrlist = new ArrayList<Address>();
-		ArrayList<String> namelist = new ArrayList<String>();
+		ArrayList<Address> addrlist = new ArrayList<>();
+		ArrayList<String> namelist = new ArrayList<>();
 		while (iter.hasNext()) {
 			Symbol sym = iter.next();
 			if (!(sym instanceof CodeSymbol)) {
@@ -607,7 +605,7 @@ public class HighFunction extends PcodeSyntaxTree {
 			throws PcodeXMLException {
 		try {
 			XmlPullParser parser =
-					XmlPullParserFactory.create(xml, "Decompiler Result Parser", handler, false);
+				XmlPullParserFactory.create(xml, "Decompiler Result Parser", handler, false);
 			return parser;
 		}
 		catch (Exception e) {
@@ -616,21 +614,32 @@ public class HighFunction extends PcodeSyntaxTree {
 	}
 
 	/**
+	 * The decompiler treats some namespaces as equivalent to the "global" namespace.
+	 * Return true if the given namespace is treated as equivalent.
+	 * @param namespace is the namespace
+	 * @return true if equivalent
+	 */
+	static final public boolean collapseToGlobal(Namespace namespace) {
+		if (namespace instanceof Library) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Append an XML &lt;parent&gt; tag to the buffer describing the formal path elements
 	 * from the root (global) namespace up to the given namespace
 	 * @param buf is the buffer to write to
 	 * @param namespace is the namespace being described
-	 * @param includeId is true if the XML tag should include namespace ids
 	 */
-	static public void createNamespaceTag(StringBuilder buf, Namespace namespace,
-			boolean includeId) {
+	static public void createNamespaceTag(StringBuilder buf, Namespace namespace) {
 		buf.append("<parent>\n");
 		if (namespace != null) {
-			ArrayList<Namespace> arr = new ArrayList<Namespace>();
+			ArrayList<Namespace> arr = new ArrayList<>();
 			Namespace curspc = namespace;
 			while (curspc != null) {
 				arr.add(0, curspc);
-				if (curspc instanceof Library) {
+				if (collapseToGlobal(curspc)) {
 					break;		// Treat library namespace as root
 				}
 				curspc = curspc.getParentNamespace();
@@ -639,9 +648,7 @@ public class HighFunction extends PcodeSyntaxTree {
 			for (int i = 1; i < arr.size(); ++i) {
 				Namespace curScope = arr.get(i);
 				buf.append("<val");
-				if (includeId) {
-					SpecXmlUtils.encodeUnsignedIntegerAttribute(buf, "id", curScope.getID());
-				}
+				SpecXmlUtils.encodeUnsignedIntegerAttribute(buf, "id", curScope.getID());
 				buf.append('>');
 				SpecXmlUtils.xmlEscape(buf, curScope.getName());
 				buf.append("</val>\n");

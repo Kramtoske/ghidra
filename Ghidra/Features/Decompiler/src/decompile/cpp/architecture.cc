@@ -27,7 +27,7 @@
 vector<ArchitectureCapability *> ArchitectureCapability::thelist;
 
 const uint4 ArchitectureCapability::majorversion = 4;
-const uint4 ArchitectureCapability::minorversion = 0;
+const uint4 ArchitectureCapability::minorversion = 1;
 
 /// This builds a list of just the ArchitectureCapability extensions
 void ArchitectureCapability::initialize(void)
@@ -60,6 +60,20 @@ ArchitectureCapability *ArchitectureCapability::findCapability(Document *doc)
     ArchitectureCapability *capa = thelist[i];
     if (capa->isXmlMatch(doc))
       return capa;
+  }
+  return (ArchitectureCapability *)0;
+}
+
+/// Return the ArchitectureCapability object with the matching name
+/// \param name is the name to match
+/// \return the ArchitectureCapability or null if no match is found
+ArchitectureCapability *ArchitectureCapability::getCapability(const string &name)
+
+{
+  for(int4 i=0;i<thelist.size();++i) {
+    ArchitectureCapability *res = thelist[i];
+    if (res->getName() == name)
+      return res;
   }
   return (ArchitectureCapability *)0;
 }
@@ -102,7 +116,7 @@ Architecture::Architecture(void)
   commentdb = (CommentDatabase *)0;
   stringManager = (StringManager *)0;
   cpool = (ConstantPool *)0;
-  symboltab = new Database(this);
+  symboltab = (Database *)0;
   context = (ContextDatabase *)0;
   print = PrintLanguageCapability::getDefault()->buildLanguage(this);
   printlist.push_back(print);
@@ -131,7 +145,8 @@ Architecture::~Architecture(void)
   for(int4 i=0;i<extra_pool_rules.size();++i)
     delete extra_pool_rules[i];
 
-  delete symboltab;
+  if (symboltab != (Database *)0)
+    delete symboltab;
   for(int4 i=0;i<(int4)printlist.size();++i)
     delete printlist[i];
   delete options;
@@ -371,7 +386,7 @@ void Architecture::setPrintLanguage(const string &nm)
 void Architecture::globalify(void)
 
 {
-  Scope *scope = buildGlobalScope();
+  Scope *scope = symboltab->getGlobalScope();
   int4 nm = numSpaces();
 
   for(int4 i=0;i<nm;++i) {
@@ -528,16 +543,16 @@ void Architecture::buildContext(DocumentStorage &store)
   context = new ContextInternal();
 }
 
-/// If it does not already exist create the glocal Scope object
+/// Create the database object, which currently doesn't not depend on any configuration
+/// data.  Then create the root (global) scope and attach it to the database.
+/// \param store is the storage for any configuration data
 /// \return the global Scope object
-Scope *Architecture::buildGlobalScope(void)
+Scope *Architecture::buildDatabase(DocumentStorage &store)
 
 {
-  Scope *globscope = symboltab->getGlobalScope();
-  if (globscope == (Scope *)0) { // Make sure global scope exists
-    globscope = new ScopeInternal("",this);
-    symboltab->attachScope(globscope,(Scope *)0);
-  }
+  symboltab = new Database(this,true);
+  Scope *globscope = new ScopeInternal(0,"",this);
+  symboltab->attachScope(globscope,(Scope *)0);
   return globscope;
 }
 
@@ -802,7 +817,7 @@ void Architecture::parseDefaultProto(const Element *el)
 void Architecture::parseGlobal(const Element *el)
 
 {
-  Scope *scope = buildGlobalScope();
+  Scope *scope = symboltab->getGlobalScope();
   const List &list(el->getChildren());
   List::const_iterator iter;
 
@@ -829,15 +844,15 @@ void Architecture::parseGlobal(const Element *el)
 void Architecture::addOtherSpace(void)
 
 {
-  Scope *scope = buildGlobalScope();
+  Scope *scope = symboltab->getGlobalScope();
   AddrSpace *otherSpace = getSpaceByName("OTHER");
   symboltab->addRange(scope,otherSpace,0,otherSpace->getHighest());
   if (otherSpace->isOverlayBase()) {
-	int4 num = numSpaces();
-	for(int4 i=0;i<num;++i){
-      OverlaySpace *ospc = (OverlaySpace *)getSpace(i);
-      if (ospc->getBaseSpace() != otherSpace) continue;
-      if (ospc->getBaseSpace() != otherSpace) continue;
+    int4 num = numSpaces();
+    for(int4 i=0;i<num;++i){
+      AddrSpace *ospc = getSpace(i);
+      if (!ospc->isOverlay()) continue;
+      if (((OverlaySpace *)ospc)->getBaseSpace() != otherSpace) continue;
       symboltab->addRange(scope,ospc,0,otherSpace->getHighest());
     }
   }
@@ -1065,7 +1080,7 @@ void Architecture::parsePreferSplit(const Element *el)
   List::const_iterator iter;
 
   for(iter=list.begin();iter!=list.end();++iter) {
-    splitrecords.push_back(PreferSplitRecord());
+    splitrecords.emplace_back();
     PreferSplitRecord &record( splitrecords.back() );
     record.storage.restoreXml( *iter, this );
     record.splitoffset = record.storage.size/2;
@@ -1203,6 +1218,26 @@ void Architecture::parseCompilerConfig(DocumentStorage &store)
     else if (elname == "inferptrbounds")
       parseInferPtrBounds(*iter);
   }
+
+  el = store.getTag("specextensions");		// Look for any user-defined configuration document
+  if (el != (const Element *)0) {
+    const List &userlist(el->getChildren());
+    for(iter=userlist.begin();iter!=userlist.end();++iter) {
+      const string &elname( (*iter)->getName() );
+      if (elname == "prototype")
+        parseProto(*iter);
+     else if (elname == "callfixup") {
+        pcodeinjectlib->restoreXmlInject(archid+" : compiler spec", (*iter)->getAttributeValue("name"),
+					 InjectPayload::CALLFIXUP_TYPE, *iter);
+      }
+      else if (elname == "callotherfixup") {
+        userops.parseCallOtherFixup(*iter,this);
+      }
+      else if (elname == "global")
+        globaltags.push_back(*iter);
+    }
+  }
+
   // <global> tags instantiate the base symbol table
   // They need to know about all spaces, so it must come
   // after parsing of <stackpointer> and <spacebase>
@@ -1279,9 +1314,11 @@ void Architecture::init(DocumentStorage &store)
   buildCommentDB(store);
   buildStringManager(store);
   buildConstantPool(store);
+  buildDatabase(store);
 
   restoreFromSpec(store);
   print->getCastStrategy()->setTypeFactory(types);
+  symboltab->adjustCaches();	// In case the specs created additional address spaces
   postSpecFile();		// Let subclasses do things after translate is ready
 
   buildInstructions(store); // Must be called after translate is built
@@ -1298,6 +1335,7 @@ void Architecture::resetDefaultsInternal(void)
   flowoptions = FlowInfo::error_toomanyinstructions;
   max_instructions = 100000;
   infer_pointers = true;
+  analyze_for_loops = true;
   readonlypropagate = false;
   alias_block_level = 2;	// Block structs and arrays by default
 }

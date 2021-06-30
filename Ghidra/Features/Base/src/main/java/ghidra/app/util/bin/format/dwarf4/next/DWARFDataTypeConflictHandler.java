@@ -15,10 +15,12 @@
  */
 package ghidra.app.util.bin.format.dwarf4.next;
 
+import static ghidra.program.model.data.DataTypeConflictHandler.ConflictResult.*;
+
 import java.util.*;
 
 import ghidra.program.model.data.*;
-import static ghidra.program.model.data.DataTypeConflictHandler.ConflictResult.*;
+import ghidra.util.SystemUtilities;
 
 /**
  * This {@link DataTypeConflictHandler conflict handler} attempts to match
@@ -80,8 +82,7 @@ class DWARFDataTypeConflictHandler extends DataTypeConflictHandler {
 	 * @return true if empty or default and false otherwise
 	 */
 	private boolean isCompositeDefault(Composite composite) {
-		return composite.isNotYetDefined()
-				|| ((composite instanceof Structure) && ((Structure) composite).getNumDefinedComponents() == 0);
+		return composite.isNotYetDefined() || (composite.getNumDefinedComponents() == 0);
 	}
 
 	private boolean isCompositePart(Composite full, Composite part, Set<Long> visitedDataTypes) {
@@ -166,41 +167,71 @@ class DWARFDataTypeConflictHandler extends DataTypeConflictHandler {
 			DataTypeComponent fullDTCAt = (partDTC.getDataType() instanceof BitFieldDataType)
 					? getBitfieldByOffsets(full, partDTC)
 					: full.getComponentAt(partDTC.getOffset());
-			if (fullDTCAt == null || fullDTCAt.getOffset() != partDTC.getOffset()) {
+			if (fullDTCAt == null || fullDTCAt.getOffset() != partDTC.getOffset() ||
+				!SystemUtilities.isEqual(fullDTCAt.getFieldName(), partDTC.getFieldName())) {
 				return false;
 			}
-			DataType partDT = partDTC.getDataType();
-			DataType fullDT = fullDTCAt.getDataType();
-			if (doRelaxedCompare(partDT, fullDT, visitedDataTypes) == RENAME_AND_ADD) {
+			if (!isMemberFieldPartiallyCompatible(fullDTCAt, partDTC, visitedDataTypes)) {
 				return false;
 			}
 		}
 		if ( part.getFlexibleArrayComponent() != null ) {
-			return full.getFlexibleArrayComponent() != null
-					&& doRelaxedCompare(part.getFlexibleArrayComponent().getDataType(),
-							full.getFlexibleArrayComponent().getDataType(), visitedDataTypes) != RENAME_AND_ADD;
+			return full.getFlexibleArrayComponent() != null &&
+				isMemberFieldPartiallyCompatible(full.getFlexibleArrayComponent(),
+					part.getFlexibleArrayComponent(), visitedDataTypes);
 		}
 
 		return true;
 	}
 
-	private DataTypeComponent getBitfieldByOffsets(Structure full, DataTypeComponent partDTC) {
-		DataTypeComponent fullDTC = full.getComponentAt(partDTC.getOffset());
-		if (fullDTC == null || fullDTC.getOffset() != partDTC.getOffset()) {
-			return null;
+	boolean isMemberFieldPartiallyCompatible(DataTypeComponent fullDTC, DataTypeComponent partDTC,
+			Set<Long> visitedDataTypes) {
+		DataType partDT = partDTC.getDataType();
+		DataType fullDT = fullDTC.getDataType();
+		ConflictResult dtCompResult = doRelaxedCompare(partDT, fullDT, visitedDataTypes);
+		switch (dtCompResult) {
+			case RENAME_AND_ADD:
+				// The data type of the field in the 'full' structure is completely
+				// different than the field in the 'part' structure, therefore
+				// the candidate 'part' structure is not a partial definition of the full struct
+				return false;
+			case REPLACE_EXISTING:
+				// Return true (meaning the field from the 'full' struct is the same or better
+				// than the field from the 'part' structure) if the components are size compatible.
+				// This is an intentionally fuzzy match to allow structures with fields
+				// that are generally the same at a binary level to match.
+				// For example, the same structure defined in 2 separate compile units with
+				// slightly different types for the field (due to different compiler options
+				// or versions or languages)
+				return fullDTC.getLength() >= partDTC.getLength();
+			case USE_EXISTING:
+			default:
+				// the data type of the field in the 'full' structure is the same as
+				// or a better version of the field in the 'part' structure.
+				return true;
 		}
+
+	}
+
+	private DataTypeComponent getBitfieldByOffsets(Structure full, DataTypeComponent partDTC) {
 		BitFieldDataType partBF = (BitFieldDataType) partDTC.getDataType();
 
+		DataTypeComponent fullDTC = full.getComponentAt(partDTC.getOffset());
+		if (fullDTC == null) {
+			return null;
+		}
 		
 		int fullNumComp = full.getNumComponents();
 		for(int fullOrdinal = fullDTC.getOrdinal(); fullOrdinal < fullNumComp; fullOrdinal++) {
 			fullDTC = full.getComponent(fullOrdinal);
-			if (fullDTC.getOffset() != partDTC.getOffset()
-					|| !(fullDTC.getDataType() instanceof BitFieldDataType)) {
-				return null;
+			if (!(fullDTC.getDataType() instanceof BitFieldDataType) ||
+				fullDTC.getOffset() > partDTC.getOffset()) {
+				break;
 			}
 			BitFieldDataType fullBF = (BitFieldDataType) fullDTC.getDataType();
-			if ( fullBF.getBitOffset() == partBF.getBitOffset() ) {
+			if (fullDTC.getOffset() == partDTC.getOffset() &&
+				fullBF.getBitOffset() == partBF.getBitOffset() &&
+				fullBF.getBitSize() == partBF.getBitSize()) {
 				return fullDTC;
 			}
 		}
@@ -215,7 +246,8 @@ class DWARFDataTypeConflictHandler extends DataTypeConflictHandler {
 	 */
 	private ConflictResult doStrictCompare(DataType addedDataType, DataType existingDataType,
 			Set<Long> visitedDataTypes) {
-		if (!addVisited(existingDataType, addedDataType, visitedDataTypes)) {
+		if (addedDataType == existingDataType ||
+			!addVisited(existingDataType, addedDataType, visitedDataTypes)) {
 			return USE_EXISTING;
 		}
 
@@ -339,7 +371,7 @@ class DWARFDataTypeConflictHandler extends DataTypeConflictHandler {
 
 	private long getDTPairKey(DataType dataType1, DataType dataType2) {
 		return ((long) System.identityHashCode(dataType1) << 32)
-				+ ((long) System.identityHashCode(dataType2) & 0xffffffffL);
+				+ (System.identityHashCode(dataType2) & 0xffffffffL);
 	}
 
 	private boolean addVisited(DataType dataType1, DataType dataType2, Set<Long> visitedDataTypes) {

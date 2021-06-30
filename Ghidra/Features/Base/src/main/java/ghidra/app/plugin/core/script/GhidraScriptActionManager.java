@@ -110,9 +110,13 @@ class GhidraScriptActionManager {
 	void restoreScriptsThatAreInTool(SaveState saveState) {
 		String[] array = saveState.getStrings(SCRIPT_ACTIONS_KEY, new String[0]);
 		for (String filename : array) {
-			ScriptInfo info = infoManager.findScriptInfoByName(filename);
-			if (info != null) { // the file may have been deleted from disk
-				provider.getActionManager().createAction(info.getSourceFile());
+			ResourceFile file = generic.util.Path.fromPathString(filename);
+			if (file.exists()) {
+				// restore happens early -- the next call will create a new ScriptInfo
+				ScriptInfo info = infoManager.getScriptInfo(file);
+				if (info != null) {
+					createAction(info.getSourceFile());
+				}
 			}
 			else {
 				Msg.info(this, "Cannot find script for keybinding: '" + filename + "'");
@@ -159,7 +163,7 @@ class GhidraScriptActionManager {
 		Set<ResourceFile> actionScriptFiles = actionMap.keySet();
 		Set<String> scriptPaths = new HashSet<>(actionScriptFiles.size());
 		for (ResourceFile file : actionScriptFiles) {
-			scriptPaths.add(file.getName());
+			scriptPaths.add(generic.util.Path.toPathString(file));
 		}
 
 		String[] array = scriptPaths.toArray(new String[scriptPaths.size()]);
@@ -259,31 +263,11 @@ class GhidraScriptActionManager {
 				.onAction(context -> showGhidraScriptJavadoc())
 				.buildAndInstallLocal(provider);
 
-		// XXX In order to override a method of the new DockingAction and use the builder, we
-		// need to override the build method of the ActionBuilder.  When the ActionBuilder is 
-		// updated, this code can be cleaned up.
-		new ActionBuilder("Ghidra API Help", plugin.getName()) {
-			@Override
-			public DockingAction build() {
-				validate();
-				DockingAction action = new DockingAction(name, owner, keyBindingType) {
-					@Override
-					public void actionPerformed(ActionContext context) {
-						actionCallback.accept(context);
-					}
-
-					@Override
-					public boolean shouldAddToWindow(boolean isMainWindow,
-							Set<Class<?>> contextTypes) {
-						return true;
-					}
-				};
-				decorateAction(action);
-				return action;
-			}
-		}.menuGroup(ToolConstants.HELP_CONTENTS_MENU_GROUP)
+		new ActionBuilder("Ghidra API Help", plugin.getName())
+				.menuGroup(ToolConstants.HELP_CONTENTS_MENU_GROUP)
 				.menuPath(ToolConstants.MENU_HELP, "Ghidra API Help")
 				.helpLocation(new HelpLocation("Misc", "Welcome_to_Ghidra_Help"))
+				.inWindow(ActionBuilder.When.ALWAYS)
 				.onAction(context -> showGhidraScriptJavadoc())
 				.buildAndInstall(plugin.getTool());
 	}
